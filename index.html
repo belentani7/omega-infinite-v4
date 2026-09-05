@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BELENTANI OMEGA OS - V4 FULL-STACK EDITION</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&family=Cinzel:wght@700&display=swap');
+        :root { --blood-red: #ff0033; --plasma-light: #ff4d4d; --deep-void: #030000; --glass-bg: rgba(10, 0, 0, 0.7); --glass-border: rgba(255, 0, 51, 0.5); --glow-intense: 0 0 40px rgba(255, 0, 51, 0.9); --glow-soft: 0 0 15px rgba(255, 0, 51, 0.4); --font-sys: 'Share Tech Mono', monospace; --font-head: 'Orbitron', sans-serif; --font-epic: 'Cinzel', serif; }
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        body { background-color: var(--deep-void); color: var(--blood-red); font-family: var(--font-sys); overflow: hidden; width: 100vw; height: 100vh; }
+        
+        #webgl-container, canvas#matrix-rain { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #webgl-container { z-index: 0; } canvas#matrix-rain { z-index: 1; opacity: 0.2; }
+        .scanlines { position: fixed; top:0; left:0; width:100vw; height:100vh; background: linear-gradient(to bottom, rgba(255,255,255,0) 50%, rgba(0,0,0,0.4) 50%); background-size: 100% 4px; z-index: 9999; pointer-events: none; opacity: 0.6; }
+        
+        #os-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; perspective: 1500px; }
+        
+        /* Glass Panels */
+        .glass-panel { position: absolute; background: var(--glass-bg); backdrop-filter: blur(30px) saturate(200%); -webkit-backdrop-filter: blur(30px) saturate(200%); border: 1px solid var(--glass-border); border-top: 2px solid rgba(255, 100, 100, 0.4); border-radius: 12px; box-shadow: inset 0 0 30px rgba(255, 0, 51, 0.15), 0 20px 50px rgba(0,0,0,0.9); display: flex; flex-direction: column; overflow: hidden; transition: transform 0.2s, opacity 0.2s; opacity: 0; transform: scale(0.9); pointer-events: none; }
+        .glass-panel.active { opacity: 1; transform: scale(1); pointer-events: auto; }
+        .panel-header { height: 40px; background: linear-gradient(90deg, rgba(255,0,51,0.4) 0%, transparent 100%); border-bottom: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; font-family: var(--font-head); font-weight: 700; color: #fff; text-shadow: 0 0 10px var(--blood-red); cursor: crosshair; }
+        .win-controls button { width: 12px; height: 12px; border-radius: 50%; border: none; margin-left: 8px; cursor: pointer; }
+        .btn-close { background: #ff0033; } .btn-min { background: #ffaa00; }
+        .panel-content { flex: 1; padding: 20px; overflow-y: auto; position: relative; }
+        ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: rgba(0,0,0,0.8); } ::-webkit-scrollbar-thumb { background: var(--blood-red); }
+
+        /* Specific UIs */
+        .data-stream { font-size: 12px; line-height: 1.6; color: var(--plasma-light); text-shadow: 0 0 5px var(--blood-red); }
+        .sys-warn { color: #ff0; text-shadow: 0 0 5px #ff0; }
+        .sys-crit { color: #fff; background: var(--blood-red); padding: 0 5px; }
+
+        .agent-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(10px, 1fr)); gap: 4px; }
+        .agent-node { aspect-ratio: 1; background: rgba(255,0,51,0.1); border: 1px solid var(--glass-border); border-radius: 2px; transition: 0.3s; }
+        .agent-node.active { background: #00ffaa; box-shadow: 0 0 10px #00ffaa; border-color: #fff; }
+        .agent-node.idle { background: var(--blood-red); box-shadow: 0 0 10px var(--blood-red); }
+
+        /* Realtime Stats */
+        .stat-block { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid rgba(255,0,51,0.3); padding-bottom: 5px; }
+        .stat-label { font-family: var(--font-head); font-size: 14px; color: #fff; }
+        .stat-val { font-size: 18px; font-weight: bold; color: var(--plasma-light); text-shadow: 0 0 10px var(--blood-red); }
+
+        /* Dock */
+        #dock { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 15px; padding: 10px 25px; background: rgba(5,0,0,0.8); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 30px; box-shadow: var(--glow-soft); z-index: 10000; }
+        .dock-icon { width: 50px; height: 50px; border-radius: 12px; background: rgba(255,0,51,0.1); border: 1px solid var(--glass-border); display: flex; justify-content: center; align-items: center; font-size: 20px; cursor: pointer; transition: all 0.3s; position: relative; }
+        .dock-icon:hover { background: var(--blood-red); color: #fff; transform: translateY(-10px) scale(1.1); box-shadow: var(--glow-intense); }
+
+        /* Easter Egg / Lockdown Overlay */
+        #lockdown-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(255, 0, 0, 0.3); z-index: 100000; display: none; flex-direction: column; justify-content: center; align-items: center; box-shadow: inset 0 0 200px rgba(255, 0, 0, 1); pointer-events: none; }
+        .lockdown-text { font-family: var(--font-epic); font-size: 90px; color: #fff; text-shadow: 0 0 40px #f00; animation: flash 0.05s infinite; text-align: center; }
+        @keyframes flash { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <div id="webgl-container"></div>
+    <canvas id="matrix-rain"></canvas>
+
+    <div id="lockdown-overlay">
+        <div class="lockdown-text">SECURITY BREACH DETECTED</div>
+        <div style="font-size: 30px; color: #fff; margin-top: 20px; text-shadow: 0 0 20px #fff;">SYSTEM OVERRIDE PROTOCOL INITIATED</div>
+    </div>
+
+    <div id="os-layer">
+
+        <!-- SYS CORE (Connected to Python Backend) -->
+        <div class="glass-panel active" id="win-sys" style="width: 400px; height: 350px; top: 10%; left: 5%; z-index: 10;">
+            <div class="panel-header"><div>SYS.CORE // TELEMETRY</div><div class="win-controls"><button class="btn-close" onclick="closeWin('win-sys')"></button></div></div>
+            <div class="panel-content">
+                <div class="stat-block"><div class="stat-label">CPU LOAD</div><div class="stat-val" id="cpu-val">--%</div></div>
+                <div class="stat-block"><div class="stat-label">RAM USAGE</div><div class="stat-val" id="ram-val">--%</div></div>
+                <div class="stat-block"><div class="stat-label">PLATFORM</div><div class="stat-val" id="os-val">--</div></div>
+                <div class="stat-block"><div class="stat-label">UPTIME</div><div class="stat-val" id="up-val">--s</div></div>
+                <div style="margin-top: 20px; color: #fff; font-size: 10px;" id="api-status">CONNECTING TO FASTAPI BACKEND (localhost:8000)...</div>
+            </div>
+        </div>
+
+        <!-- OMEGA AGENT MATRIX -->
+        <div class="glass-panel active" id="win-matrix" style="width: 600px; height: 400px; top: 15%; right: 5%; z-index: 11;">
+            <div class="panel-header"><div>OMEGA AGENT MATRIX (300 NODES)</div><div class="win-controls"><button class="btn-close" onclick="closeWin('win-matrix')"></button></div></div>
+            <div class="panel-content">
+                <div class="agent-grid" id="agent-grid"></div>
+            </div>
+        </div>
+
+        <!-- TERMINAL -->
+        <div class="glass-panel" id="win-term" style="width: 700px; height: 500px; top: 50%; left: 30%; z-index: 12;">
+            <div class="panel-header"><div>PLANETA.M SECURE TERMINAL</div><div class="win-controls"><button class="btn-close" onclick="closeWin('win-term')"></button></div></div>
+            <div class="panel-content data-stream" id="term-output">
+                <div>[INIT] OMEGA INFINITE OS V4 - FULL STACK</div>
+            </div>
+        </div>
+
+        <!-- DOCK -->
+        <div id="dock">
+            <div class="dock-icon" data-name="Telemetry" onclick="openWin('win-sys')">🎛️</div>
+            <div class="dock-icon" data-name="Agent Matrix" onclick="openWin('win-matrix')">🕸️</div>
+            <div class="dock-icon" data-name="Terminal" onclick="openWin('win-term')">💻</div>
+            <div class="dock-icon" data-name="EMERGENCY LOCKDOWN" onclick="triggerEasterEgg()" style="border-color: #fff;">⚠️</div>
+        </div>
+    </div>
+
+    <script>
+        // BACKEND CONNECTION (FASTAPI)
+        const API_URL = "http://localhost:8000";
+        let backendConnected = false;
+
+        async function fetchSysStats() {
+            try {
+                const res = await fetch(`${API_URL}/api/system`);
+                const data = await res.json();
+                document.getElementById('cpu-val').textContent = data.cpu_usage + '%';
+                document.getElementById('ram-val').textContent = data.ram_usage + '%';
+                document.getElementById('os-val').textContent = data.platform;
+                document.getElementById('up-val').textContent = data.uptime + 's';
+                document.getElementById('api-status').textContent = "BACKEND CONNECTED: OMEGA CORE ONLINE";
+                document.getElementById('api-status').style.color = "#00ffaa";
+                backendConnected = true;
+            } catch (err) {
+                document.getElementById('api-status').textContent = "BACKEND OFFLINE. START backend.py";
+                document.getElementById('api-status').style.color = "#ff0033";
+            }
+        }
+
+        async function fetchAgentMatrix() {
+            const grid = document.getElementById('agent-grid');
+            if (grid.children.length === 0) {
+                for(let i=0; i<300; i++) {
+                    const node = document.createElement('div');
+                    node.className = 'agent-node';
+                    grid.appendChild(node);
+                }
+            }
+
+            if(backendConnected) {
+                const res = await fetch(`${API_URL}/api/agents`);
+                const data = await res.json();
+                const nodes = grid.children;
+                data.nodes.forEach((agent, i) => {
+                    nodes[i].className = 'agent-node ' + agent.status;
+                });
+            } else {
+                // Fallback mockup
+                const nodes = grid.children;
+                for(let i=0; i<300; i++) {
+                    nodes[i].className = 'agent-node ' + (Math.random() > 0.85 ? 'active' : 'idle');
+                }
+            }
+        }
+
+        setInterval(fetchSysStats, 2000);
+        setInterval(fetchAgentMatrix, 1000);
+
+        /* --- THREE.JS BACKGROUND --- */
+        function initWebGL() {
+            const container = document.getElementById('webgl-container');
+            const scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x030000, 0.002);
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 30, 200);
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            const terrainGeo = new THREE.PlaneGeometry(3000, 3000, 60, 60);
+            const pos = terrainGeo.attributes.position;
+            for(let i=0; i<pos.count; i++) {
+                pos.setZ(i, Math.sin(pos.getX(i)*0.02)*Math.cos(pos.getY(i)*0.02)*50);
+            }
+            terrainGeo.computeVertexNormals();
+            const terrain = new THREE.Mesh(terrainGeo, new THREE.MeshBasicMaterial({ color: 0xff0033, wireframe: true, transparent: true, opacity: 0.3 }));
+            terrain.rotation.x = -Math.PI / 2; terrain.position.y = -50;
+            scene.add(terrain);
+
+            const pGeo = new THREE.BufferGeometry();
+            const pPos = new Float32Array(5000 * 3);
+            for(let i=0; i<15000; i++) pPos[i] = (Math.random() - 0.5) * 1500;
+            pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+            const particles = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: 0xff4d4d, size: 2, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending }));
+            scene.add(particles);
+
+            let time = 0;
+            function animate() {
+                requestAnimationFrame(animate);
+                time += 0.002;
+                terrain.position.z = (time * 200) % 50;
+                particles.rotation.y = time * 0.1;
+                renderer.render(scene, camera);
+            }
+            animate();
+            window.addEventListener('resize', () => { camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
+        }
+
+        /* --- MATRIX RAIN --- */
+        function initMatrix() {
+            const canvas = document.getElementById('matrix-rain');
+            const ctx = canvas.getContext('2d');
+            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            const letters = '01ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+            const fontSize = 16; const drops = Array(Math.floor(canvas.width / fontSize)).fill(1);
+            setInterval(() => {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#ff0033'; ctx.font = fontSize + 'px Share Tech Mono';
+                for (let i = 0; i < drops.length; i++) {
+                    ctx.fillText(letters.charAt(Math.floor(Math.random() * letters.length)), i * fontSize, drops[i] * fontSize);
+                    if (drops[i] * fontSize > canvas.height && Math.random() > 0.95) drops[i] = 0;
+                    drops[i]++;
+                }
+            }, 33);
+        }
+
+        /* --- WINDOW MANAGEMENT --- */
+        let zIndex = 100;
+        function openWin(id) { const w = document.getElementById(id); w.classList.add('active'); w.style.zIndex = ++zIndex; }
+        function closeWin(id) { document.getElementById(id).classList.remove('active'); }
+        document.querySelectorAll('.glass-panel').forEach(win => {
+            const header = win.querySelector('.panel-header');
+            let isDragging = false, startX, startY, initL, initT;
+            header.addEventListener('mousedown', (e) => { if(e.target.tagName==='BUTTON')return; isDragging = true; startX = e.clientX; startY = e.clientY; initL = win.offsetLeft; initT = win.offsetTop; win.style.zIndex = ++zIndex; });
+            document.addEventListener('mousemove', (e) => { if(!isDragging)return; win.style.left = `${initL + (e.clientX - startX)}px`; win.style.top = `${initT + (e.clientY - startY)}px`; });
+            document.addEventListener('mouseup', () => isDragging = false);
+            win.addEventListener('mousedown', () => win.style.zIndex = ++zIndex);
+        });
+
+        /* --- EASTER EGG --- */
+        let lockdown = false;
+        async function triggerEasterEgg() {
+            const overlay = document.getElementById('lockdown-overlay');
+            if(!lockdown) {
+                overlay.style.display = 'flex';
+                document.body.style.animation = 'flash 0.1s infinite';
+                lockdown = true;
+                if(backendConnected) {
+                    await fetch(`${API_URL}/api/security/lockdown`, {method: 'POST'});
+                }
+                setTimeout(triggerEasterEgg, 5000);
+            } else {
+                overlay.style.display = 'none';
+                document.body.style.animation = 'none';
+                lockdown = false;
+            }
+        }
+        
+        let typed = "";
+        document.addEventListener('keydown', (e) => {
+            typed += e.key.toUpperCase();
+            if(typed.length > 10) typed = typed.substring(1);
+            if(typed.includes("ALERT") || typed.includes("THIAGO")) {
+                triggerEasterEgg();
+                typed = "";
+            }
+        });
+
+        window.onload = () => { initWebGL(); initMatrix(); fetchSysStats(); fetchAgentMatrix(); };
+    </script>
+</body>
+</html>
