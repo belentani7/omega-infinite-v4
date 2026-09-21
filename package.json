@@ -1,0 +1,12 @@
+{
+  "name": "omega-nexus-void",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "python backend.py",
+    "build": "echo 'Python app - no build needed'",
+    "start": "python backend.py"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
